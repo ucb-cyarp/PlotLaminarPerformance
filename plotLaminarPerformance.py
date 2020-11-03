@@ -76,6 +76,9 @@ def setup():
     parser = argparse.ArgumentParser(description='Plots telemetry information collected from Laminar process')
     parser.add_argument('--config', type=str, required=True, help='Path to the telemetry configuration JSON file')
     parser.add_argument('--telem-path', type=str, required=True, help='Path to the telemetry files referenced in the configuration JSON file')
+    parser.add_argument('--output-file-prefix', type=str, required=False, help='If supplied, plots will be written to files with this given prefix')
+    parser.add_argument('--prj-name', type=str, required=False, help='A human readable name for the project, if not provided the name is pulled from the telemetry config file')
+    parser.add_argument('--summarize-fifos', required=False, action='store_true', help='Combines the actions for input & output FIFOs')
     parser.add_argument('--partition-names', nargs='+', type=str, required=False, help='List of human readable names corresponding to each partition (in ascending order of partitions)')
 
     args = parser.parse_args()
@@ -148,9 +151,16 @@ def setup():
     field_names.rate = telem_config['rateMSPSName']
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
-                                                  'telemPath', 'prj_name'])
+                                                  'telemPath', 'prj_name', 'outputPrefix', 'summarizeFIFOs'])
+
+    if args.prj_name is None:
+        prj_name = telem_config['name']
+    else:
+        prj_name = args.prj_name
+
     rtn_val = RtnType(partitionNameMap=partitionNameMap, partitionFileMap=partitionFileMap, fieldNames=field_names,
-                      partitions=partition_nums_sorted, telemPath=telem_path, prj_name=telem_config['name'])
+                      partitions=partition_nums_sorted, telemPath=telem_path, prj_name=prj_name,
+                      outputPrefix=args.output_file_prefix, summarizeFIFOs=args.summarize_fifos)
     return rtn_val
 
 def plotLayer(values, lbl, x_lbls, y_offset, bar_width, tableTxt: typing.List[str], tableLbls: typing.List[str], colors,
@@ -172,7 +182,8 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
               partitionNames: typing.Dict[int, PartitionStats],
               partitions: typing.List[int],
               prj_name: str,
-              summarizeFIFO: bool):
+              summarizeFIFO: bool,
+              outputPrefix: str):
 
     # See https://matplotlib.org/gallery/lines_bars_and_markers/bar_stacked.html#sphx-glr-gallery-lines-bars-and-markers-bar-stacked-py
     # for information on making stacked bar plots
@@ -291,7 +302,10 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     plt.title('Workload Distribution: ' + prj_name)
     ax.set_axisbelow(True)
     plt.grid()
-    plt.savefig('./test/testExport.pdf', format='pdf')
+
+    if outputPrefix is not None:
+        plt.savefig(outputPrefix+'_bar.pdf', format='pdf')
+
     plt.show()
 
 def reportRates(partitionStats: typing.Dict[int, PartitionStats],
@@ -313,7 +327,8 @@ def main():
 
     reportRates(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions)
 
-    plotStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name, False)
+    plotStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
+              setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix)
 
 if __name__ == '__main__':
     main()

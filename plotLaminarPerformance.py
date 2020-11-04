@@ -180,6 +180,64 @@ def wrapText(text: str, width: int):
 
     return (numLines, "\n".join(wrappedText))
 
+# Set annotation heights so that text does not overlap
+# Will place annotations below conflicting ones
+def determineAnnotationYPos(desiredYPos: typing.List[float], right: typing.List[bool], height: float):
+    # Sort the desired positions in decending order since we will be placing conflicting labels lower
+    desiredYPosPd = pd.Series(desiredYPos)
+    #TODO: Clean this up after reviewing pandas semantics for indexing into sorted array
+    desiredYPosPd.sort_values(ascending=False, inplace=True)
+    desiredYPosInd = desiredYPosPd.index
+    selectedYPosPd = [0.0]*len(desiredYPos)
+
+    lastLeftY = None
+    lastRightY = None
+
+    for i in desiredYPosInd:
+        # Check the last entry to determine if this position overlaps
+        # Since we are sorted, if yPos+height > lastYPos, then this pos must be set to lastYPos-height
+        # That is because, even if yPos+height > lastYPos+height (is completely above the last block), it could only
+        # occure because the last block was moved due to a conflict (since it should have been before this block in the
+        # sorted list)
+        if right[i]:
+            if lastRightY is None:
+                lastRightY = desiredYPos[i]
+                selectedYPosPd[i] = desiredYPos[i]
+            elif desiredYPos[i] + height > lastRightY:
+                conflictPos = lastRightY - height
+                lastRightY = conflictPos
+                selectedYPosPd[i] = conflictPos
+            else:
+                lastRightY = desiredYPos[i]
+                selectedYPosPd[i] = desiredYPos[i]
+        else:
+            if lastLeftY is None:
+                lastLeftY = desiredYPos[i]
+                selectedYPosPd[i] = desiredYPos[i]
+            elif desiredYPos[i] + height > lastLeftY:
+                conflictPos = lastLeftY - height
+                lastLeftY = conflictPos
+                selectedYPosPd[i] = conflictPos
+            else:
+                lastLeftY = desiredYPos[i]
+                selectedYPosPd[i] = desiredYPos[i]
+
+    return selectedYPosPd
+
+def wrapLbls(lbls):
+    # Wrap the label text
+    # TODO: Set the number of characters for the wrap dynamically based on the font size
+    #       See https://matplotlib.org/3.1.1/_modules/matplotlib/table.html#Cell.auto_set_font_size
+    #       For ideas on how one might go about doing this
+    numChars = 14
+    lbls_wrapped = []
+    lbls_maxnumlines = 1
+    for lbl in lbls:
+        numLines, txt = wrapText(lbl, numChars)
+        lbls_maxnumlines = max(lbls_maxnumlines, numLines)
+        lbls_wrapped.append(txt)
+    return lbls_wrapped, lbls_maxnumlines
+
 def plotStats(partitionStats: typing.Dict[int, PartitionStats],
               partitionNames: typing.Dict[int, PartitionStats],
               partitions: typing.List[int],
@@ -260,17 +318,7 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     tableTxt.reverse()
     colors = colors[::-1]
 
-    # Wrap the label text
-    # TODO: Set the number of characters for the wrap dynamically based on the font size
-    #       See https://matplotlib.org/3.1.1/_modules/matplotlib/table.html#Cell.auto_set_font_size
-    #       For ideas on how one might go about doing this
-    numChars=14
-    x_lbls_wrapped = []
-    x_lblx_numlines = 1
-    for lbl in x_lbls:
-        numLines, txt = wrapText(lbl, numChars)
-        x_lblx_numlines = max(x_lblx_numlines, numLines)
-        x_lbls_wrapped.append(txt)
+    x_lbls_wrapped, x_lblx_numlines = wrapLbls(x_lbls)
 
     tbl = plt.table(cellText=tableTxt,
                     rowLabels=tableLbls,
@@ -308,7 +356,83 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     if outputPrefix is not None:
         plt.savefig(outputPrefix+'_bar.pdf', format='pdf')
 
-    plt.show()
+def plotComputePieStats(partitionStats: typing.Dict[int, PartitionStats],
+                        partitionNames: typing.Dict[int, PartitionStats],
+                        partitions: typing.List[int],
+                        prj_name: str,
+                        summarizeFIFO: bool,
+                        outputPrefix: str):
+
+    # Create a Pie Chart
+    # See https://matplotlib.org/3.1.1/gallery/pie_and_polar_charts/pie_features.html#sphx-glr-gallery-pie-and-polar-charts-pie-features-py
+    # and https://matplotlib.org/3.1.1/gallery/pie_and_polar_charts/pie_and_donut_labels.html#sphx-glr-gallery-pie-and-polar-charts-pie-and-donut-labels-py
+
+    computeTime = np.array([partitionStats[x].computeTimePerSampleAvg for x in partitions])
+    x_lbls = np.array([partitionNames[x] for x in partitions])
+    x_lbls_wrapped, x_lblx_numlines = wrapLbls(x_lbls)
+
+    computeTimePercent = computeTime*100.0/computeTime.sum()
+    pieLblInsideThreshold = 5
+
+    fig_pie = plt.figure(figsize=[8, 5])
+    ax_pie = fig_pie.add_subplot(1, 1, 1)
+    wedges, texts, autotexts = ax_pie.pie(computeTimePercent,
+                                          autopct=lambda val: '%1.1f%%' % val if val>=pieLblInsideThreshold else '',
+                                          startangle=90)
+    ax_pie.axis('equal')
+    ax_pie.legend(wedges, x_lbls_wrapped,
+              title="Partitions",
+              loc="center left")
+
+    # The settings for annotation boxes are
+    # https://matplotlib.org/3.1.1/gallery/pie_and_polar_charts/pie_and_donut_labels.html#sphx-glr-gallery-pie-and-polar-charts-pie-and-donut-labels-py
+    bbox_props = dict(boxstyle="square,pad=0.3", facecolor="None", edgecolor="None")
+
+    kw = dict(arrowprops=dict(arrowstyle="-"),
+              bbox=bbox_props, zorder=0, va="center")
+
+    txtLbls = ['%1.1f%%' % p for p in computeTimePercent]
+
+    # TODO: get this from the renderer
+    annotationVspace = 0.2
+
+    # Need to get parameters for annotations to correct for text overlap
+    annotationWedgeInd = []
+    annotationXY = []
+    annotationRight = []
+    annotationDesiredY = []
+    annotationAng = []
+    annotationTxtLbl = []
+
+    # The math for computing the position of annotations and connectors is a modified version of the code in the turorial
+    # https://matplotlib.org/3.1.1/gallery/pie_and_polar_charts/pie_and_donut_labels.html#sphx-glr-gallery-pie-and-polar-charts-pie-and-donut-labels-py
+    for i, p in enumerate(wedges):
+        if computeTimePercent[i] < pieLblInsideThreshold:
+            annotationWedgeInd.append(i)
+            ang = (p.theta2 - p.theta1) / 2. + p.theta1
+            annotationAng.append(ang)
+            y = np.sin(np.deg2rad(ang))
+            x = np.cos(np.deg2rad(ang))
+            annotationXY.append((x, y))
+            annotationRight.append(True if x >= 0 else False)
+            annotationDesiredY.append(1.4 * y)
+            annotationTxtLbl.append(txtLbls[i])
+
+    annotationLblY = determineAnnotationYPos(annotationDesiredY, annotationRight, annotationVspace)
+
+    for i in range(0, len(annotationWedgeInd)):
+        horizontalalignment = "right" if annotationRight[i] else "left"
+        # connectionstyle = "angle,angleA=0,angleB={}".format(annotationAng[i])
+        # kw["arrowprops"].update({"connectionstyle": connectionstyle})
+        ax_pie.annotate(annotationTxtLbl[i], xy=annotationXY[i], xytext=(1.5 * (1.0 if annotationRight[i] else -1.0), annotationLblY[i]),
+                        horizontalalignment=horizontalalignment, **kw)
+
+    ax_pie.set_title("Compute Workload Distribution: " + prj_name, y=1.2)
+    plt.subplots_adjust(left=0.02, bottom=0.2, right=0.98, top=0.8)
+
+    if outputPrefix is not None:
+        plt.savefig(outputPrefix+'_pie.pdf', format='pdf')
+
 
 def reportRates(partitionStats: typing.Dict[int, PartitionStats],
                 partitionNames: typing.Dict[int, PartitionStats],
@@ -331,6 +455,13 @@ def main():
 
     plotStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
               setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix)
+
+    plotComputePieStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
+                        setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix)
+
+    # Based on https://stackoverflow.com/questions/28269157/plotting-in-a-non-blocking-way-with-matplotlib
+    # need a final plt.show() to force drawing to occur for all of the non-blocking instances
+    plt.show()
 
 if __name__ == '__main__':
     main()

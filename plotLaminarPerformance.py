@@ -81,7 +81,8 @@ def setup():
     parser.add_argument('--output-file-prefix', type=str, required=False, help='If supplied, plots will be written to files with this given prefix')
     parser.add_argument('--prj-name', type=str, required=False, help='A human readable name for the project, if not provided the name is pulled from the telemetry config file')
     parser.add_argument('--summarize-fifos', required=False, action='store_true', help='Combines the actions for input & output FIFOs')
-    parser.add_argument('--cpu-freq-ghz', required=False, type=float, default=-1.0, help='CPU Clk Frequency in GHz.  If supplied (positive), result will be presented in estimated cycles/sample')
+    parser.add_argument('--cpu-freq-ghz', required=False, type=float, help='CPU Clk Frequency in GHz.  If supplied (positive), result will be presented in estimated cycles/sample')
+    parser.add_argument('--ylim', required=False, type=float, nargs=2, help='The y limits (low, high).  If supplied, overrides the automatic y limit')
     parser.add_argument('--partition-names', nargs='+', type=str, required=False, help='List of human readable names corresponding to each partition (in ascending order of partitions)')
 
     args = parser.parse_args()
@@ -154,17 +155,26 @@ def setup():
     field_names.rate = telem_config['rateMSPSName']
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
-                                                  'telemPath', 'prj_name', 'outputPrefix', 'summarizeFIFOs', 'clkFreqGHz'])
+                                                  'telemPath', 'prj_name', 'outputPrefix', 'summarizeFIFOs',
+                                                  'clkFreqGHz', 'yLim'])
 
     if args.prj_name is None:
         prj_name = telem_config['name']
     else:
         prj_name = args.prj_name
 
+    clkFreqGHz = args.cpu_freq_ghz # It is OK if this is None, will be handled later
+
+    yLim = args.ylim
+
+    if yLim is not None:
+        if yLim[0] >= yLim[1]:
+            raise ValueError('y Limit should be supplied with the lowest number first')
+
     rtn_val = RtnType(partitionNameMap=partitionNameMap, partitionFileMap=partitionFileMap, fieldNames=field_names,
                       partitions=partition_nums_sorted, telemPath=telem_path, prj_name=prj_name,
                       outputPrefix=args.output_file_prefix, summarizeFIFOs=args.summarize_fifos,
-                      clkFreqGHz=args.cpu_freq_ghz)
+                      clkFreqGHz=clkFreqGHz, yLim=yLim)
     return rtn_val
 
 def plotLayer(values, lbl, x_lbls, y_offset, bar_width, tableTxt: typing.List[str], tableLbls: typing.List[str], colors,
@@ -246,7 +256,8 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
               prj_name: str,
               summarizeFIFO: bool,
               outputPrefix: str,
-              cpuFreqGhz: float):
+              cpuFreqGhz: float,
+              yLim: typing.List[float]):
 
     # See https://matplotlib.org/gallery/lines_bars_and_markers/bar_stacked.html#sphx-glr-gallery-lines-bars-and-markers-bar-stacked-py
     # for information on making stacked bar plots
@@ -257,7 +268,8 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     # https://matplotlib.org/3.3.2/tutorials/colors/colormaps.html
     # https://stackoverflow.com/questions/25408393/getting-individual-colors-from-a-color-map-in-matplotlib
 
-    reportEstCycles: bool = cpuFreqGhz > 0
+    reportEstCycles: bool = cpuFreqGhz is not None
+    overrideYLim: bool = yLim is not None
 
     bar_width = 0.35
 
@@ -367,6 +379,8 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     else:
         plt.ylabel('Time (us/Sample - Avg)')
     plt.xticks([])
+    if overrideYLim:
+        plt.ylim(yLim)
     plt.title('Workload Distribution: ' + prj_name)
     ax.set_axisbelow(True)
     plt.grid()
@@ -472,7 +486,7 @@ def main():
     reportRates(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions)
 
     plotStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
-              setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix, setup_rtn.clkFreqGHz)
+              setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix, setup_rtn.clkFreqGHz, setup_rtn.yLim)
 
     plotComputePieStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
                         setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix)

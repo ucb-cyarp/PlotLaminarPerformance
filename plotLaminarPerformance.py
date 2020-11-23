@@ -82,6 +82,7 @@ def setup():
     parser.add_argument('--prj-name', type=str, required=False, help='A human readable name for the project, if not provided the name is pulled from the telemetry config file')
     parser.add_argument('--summarize-fifos', required=False, action='store_true', help='Combines the actions for input & output FIFOs')
     parser.add_argument('--cpu-freq-ghz', required=False, type=float, help='CPU Clk Frequency in GHz.  If supplied (positive), result will be presented in estimated cycles/sample')
+    parser.add_argument('--block-size', required=False, type=int, help='Block Size (in samples).  If supplied (positive), result will be presented in estimated time (or cycles)/block. WARNING: Assumes block size is same for all partitions which may not be true if multiple clock domains are present')
     parser.add_argument('--ylim', required=False, type=float, nargs=2, help='The y limits (low, high).  If supplied, overrides the automatic y limit')
     parser.add_argument('--partition-names', nargs='+', type=str, required=False, help='List of human readable names corresponding to each partition (in ascending order of partitions)')
 
@@ -156,7 +157,7 @@ def setup():
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
                                                   'telemPath', 'prj_name', 'outputPrefix', 'summarizeFIFOs',
-                                                  'clkFreqGHz', 'yLim'])
+                                                  'clkFreqGHz', 'blockSize', 'yLim'])
 
     if args.prj_name is None:
         prj_name = telem_config['name']
@@ -164,6 +165,7 @@ def setup():
         prj_name = args.prj_name
 
     clkFreqGHz = args.cpu_freq_ghz # It is OK if this is None, will be handled later
+    blockSize = args.block_size # It is OK if this is None, will be handled later
 
     yLim = args.ylim
 
@@ -174,7 +176,7 @@ def setup():
     rtn_val = RtnType(partitionNameMap=partitionNameMap, partitionFileMap=partitionFileMap, fieldNames=field_names,
                       partitions=partition_nums_sorted, telemPath=telem_path, prj_name=prj_name,
                       outputPrefix=args.output_file_prefix, summarizeFIFOs=args.summarize_fifos,
-                      clkFreqGHz=clkFreqGHz, yLim=yLim)
+                      clkFreqGHz=clkFreqGHz, blockSize=blockSize, yLim=yLim)
     return rtn_val
 
 def plotLayer(values, lbl, x_lbls, y_offset, bar_width, tableTxt: typing.List[str], tableLbls: typing.List[str], colors,
@@ -257,6 +259,7 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
               summarizeFIFO: bool,
               outputPrefix: str,
               cpuFreqGhz: float,
+              blockSize: int,
               yLim: typing.List[float]):
 
     # See https://matplotlib.org/gallery/lines_bars_and_markers/bar_stacked.html#sphx-glr-gallery-lines-bars-and-markers-bar-stacked-py
@@ -269,6 +272,7 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     # https://stackoverflow.com/questions/25408393/getting-individual-colors-from-a-color-map-in-matplotlib
 
     reportEstCycles: bool = cpuFreqGhz is not None
+    reportPerBlock = blockSize is not None
     overrideYLim: bool = yLim is not None
 
     bar_width = 0.35
@@ -288,6 +292,9 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     layerNum = 0
 
     computeTime = np.array([partitionStats[x].computeTimePerSampleAvg for x in partitions])
+    if reportPerBlock:
+        computeTime *= blockSize
+
     if reportEstCycles:
         computeTime *= cpuFreqGhz * 1.0e3
 
@@ -299,6 +306,13 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     waitingForOutputFIFOsTime = np.array([partitionStats[x].waitingForOutputFIFOsPerSampleAvg for x in partitions])
     readingInputFIFOsTime = np.array([partitionStats[x].readingInputFIFOsPerSampleAvg for x in partitions])
     writingOutputFIFOsTime = np.array([partitionStats[x].writingOutputFIFOsPerSampleAvg for x in partitions])
+
+    if reportPerBlock:
+        waitingForInputFIFOsTime *= blockSize
+        waitingForOutputFIFOsTime *= blockSize
+        readingInputFIFOsTime *= blockSize
+        writingOutputFIFOsTime *= blockSize
+
     if reportEstCycles:
         waitingForInputFIFOsTime *= cpuFreqGhz * 1.0e3
         waitingForOutputFIFOsTime *= cpuFreqGhz * 1.0e3
@@ -333,6 +347,10 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
                              colors=colors, cmap=cmap, layerNum=layerNum)
 
     telemetryMiscTime = np.array([partitionStats[x].telemetryMiscPerSampleAvg for x in partitions])
+
+    if reportPerBlock:
+        telemetryMiscTime *= blockSize
+
     if reportEstCycles:
         telemetryMiscTime *= cpuFreqGhz * 1.0e3
 
@@ -373,11 +391,17 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     #From the Tutorial for moving the layout to make room for a table
     plt.subplots_adjust(left=0.15, bottom=0.2, right=0.975, top=0.95)
 
-    #Set lables
+    perLbl = 'Sample'
+    if reportPerBlock:
+        perLbl = 'Block [' + str(blockSize) + ' Samples]'
+
     if reportEstCycles:
-        plt.ylabel('Estimated Cycles/Sample - Avg ({} GHz Clk)'.format(cpuFreqGhz))
+        yLbl = 'Estimated Cycles/' + perLbl + ' - Avg ({} GHz Clk)'.format(cpuFreqGhz)
     else:
-        plt.ylabel('Time (us/Sample - Avg)')
+        yLbl = 'Time (us/' + perLbl + ' - Avg)'
+
+    #Set lables
+    plt.ylabel(yLbl)
     plt.xticks([])
     if overrideYLim:
         plt.ylim(yLim)
@@ -387,6 +411,12 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
 
     if outputPrefix is not None:
         plt.savefig(outputPrefix+'_bar.pdf', format='pdf')
+
+    # Write to csv
+    x_lbls_Series = pd.Series([partitionNames[x] for x in partitions])
+    printTbl = pd.DataFrame(data=tableTxt, columns=x_lbls_Series)
+    printTbl.insert(loc=0, column='us/'+perLbl, value=tableLbls)
+    printTbl.to_csv(outputPrefix+'_bar.csv', index=False)
 
 def plotComputePieStats(partitionStats: typing.Dict[int, PartitionStats],
                         partitionNames: typing.Dict[int, PartitionStats],

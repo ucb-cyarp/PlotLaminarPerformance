@@ -516,7 +516,8 @@ def main():
     reportRates(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions)
 
     plotStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
-              setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix, setup_rtn.clkFreqGHz, setup_rtn.yLim)
+              setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix, setup_rtn.clkFreqGHz, setup_rtn.blockSize,
+              setup_rtn.yLim)
 
     plotComputePieStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
                         setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix)

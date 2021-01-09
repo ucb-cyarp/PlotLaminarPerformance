@@ -85,6 +85,7 @@ def setup():
     parser.add_argument('--block-size', required=False, type=int, help='Block Size (in samples).  If supplied (positive), result will be presented in estimated time (or cycles)/block. WARNING: Assumes block size is same for all partitions which may not be true if multiple clock domains are present')
     parser.add_argument('--ylim', required=False, type=float, nargs=2, help='The y limits (low, high).  If supplied, overrides the automatic y limit')
     parser.add_argument('--partition-names', nargs='+', type=str, required=False, help='List of human readable names corresponding to each partition (in ascending order of partitions)')
+    parser.add_argument('--title', required=False, type=str, help='Title for the graphs.  If not supplied, the project name will be used')
 
     args = parser.parse_args()
 
@@ -157,7 +158,7 @@ def setup():
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
                                                   'telemPath', 'prj_name', 'outputPrefix', 'summarizeFIFOs',
-                                                  'clkFreqGHz', 'blockSize', 'yLim'])
+                                                  'clkFreqGHz', 'blockSize', 'yLim', 'title'])
 
     if args.prj_name is None:
         prj_name = telem_config['name']
@@ -173,10 +174,14 @@ def setup():
         if yLim[0] >= yLim[1]:
             raise ValueError('y Limit should be supplied with the lowest number first')
 
+    title = args.title
+    if title is None:
+        title = prj_name
+
     rtn_val = RtnType(partitionNameMap=partitionNameMap, partitionFileMap=partitionFileMap, fieldNames=field_names,
                       partitions=partition_nums_sorted, telemPath=telem_path, prj_name=prj_name,
                       outputPrefix=args.output_file_prefix, summarizeFIFOs=args.summarize_fifos,
-                      clkFreqGHz=clkFreqGHz, blockSize=blockSize, yLim=yLim)
+                      clkFreqGHz=clkFreqGHz, blockSize=blockSize, yLim=yLim, title=title)
     return rtn_val
 
 def plotLayer(values, lbl, x_lbls, y_offset, bar_width, tableTxt: typing.List[str], tableLbls: typing.List[str], colors,
@@ -260,7 +265,8 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
               outputPrefix: str,
               cpuFreqGhz: float,
               blockSize: int,
-              yLim: typing.List[float]):
+              yLim: typing.List[float],
+              title: str):
 
     # See https://matplotlib.org/gallery/lines_bars_and_markers/bar_stacked.html#sphx-glr-gallery-lines-bars-and-markers-bar-stacked-py
     # for information on making stacked bar plots
@@ -320,31 +326,34 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
         writingOutputFIFOsTime *= cpuFreqGhz * 1.0e3
 
     if summarizeFIFO:
-        waitingForFIFOsTime = waitingForInputFIFOsTime + waitingForOutputFIFOsTime
-        layerNum = plotLayer(values=waitingForFIFOsTime, lbl='Waiting for FIFOs', x_lbls=x_lbls,
-                             y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
-                             colors=colors, cmap=cmap, layerNum=layerNum)
-
+        layerNumTmp = layerNum
         readingWritingFIFOs = readingInputFIFOsTime + writingOutputFIFOsTime
         layerNum = plotLayer(values=readingWritingFIFOs, lbl='Reading/Writing FIFOs', x_lbls=x_lbls,
                              y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
-                             colors=colors, cmap=cmap, layerNum=layerNum)
+                             colors=colors, cmap=cmap, layerNum=layerNumTmp+1)
+        waitingForFIFOsTime = waitingForInputFIFOsTime + waitingForOutputFIFOsTime
+        layerNum = plotLayer(values=waitingForFIFOsTime, lbl='Waiting for FIFOs', x_lbls=x_lbls,
+                             y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
+                             colors=colors, cmap=cmap, layerNum=layerNumTmp+0)
+        layerNum += 2
     else:
-        layerNum = plotLayer(values=waitingForInputFIFOsTime, lbl='Waiting for Input FIFOs', x_lbls=x_lbls,
-                             y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
-                             colors=colors, cmap=cmap, layerNum=layerNum)
-        layerNum = plotLayer(values=waitingForOutputFIFOsTime, lbl='Waiting for Output FIFOs',
-                             x_lbls=x_lbls,
-                             y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
-                             colors=colors, cmap=cmap, layerNum=layerNum)
+        layerNumTmp = layerNum
         layerNum = plotLayer(values=readingInputFIFOsTime, lbl='Reading Input FIFOs',
                              x_lbls=x_lbls,
                              y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
-                             colors=colors, cmap=cmap, layerNum=layerNum)
+                             colors=colors, cmap=cmap, layerNum=layerNumTmp+2)
         layerNum = plotLayer(values=writingOutputFIFOsTime, lbl='Writing Output FIFOs',
                              x_lbls=x_lbls,
                              y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
-                             colors=colors, cmap=cmap, layerNum=layerNum)
+                             colors=colors, cmap=cmap, layerNum=layerNumTmp+3)
+        layerNum = plotLayer(values=waitingForInputFIFOsTime, lbl='Waiting for Input FIFOs', x_lbls=x_lbls,
+                             y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
+                             colors=colors, cmap=cmap, layerNum=layerNumTmp+0)
+        layerNum = plotLayer(values=waitingForOutputFIFOsTime, lbl='Waiting for Output FIFOs',
+                             x_lbls=x_lbls,
+                             y_offset=y_offset, bar_width=bar_width, tableTxt=tableTxt, tableLbls=tableLbls,
+                             colors=colors, cmap=cmap, layerNum=layerNumTmp+1)
+        layerNum += 4
 
     telemetryMiscTime = np.array([partitionStats[x].telemetryMiscPerSampleAvg for x in partitions])
 
@@ -405,7 +414,7 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     plt.xticks([])
     if overrideYLim:
         plt.ylim(yLim)
-    plt.title('Workload Distribution: ' + prj_name)
+    plt.title('Workload Distribution: ' + title)
     ax.set_axisbelow(True)
     plt.grid()
 
@@ -423,7 +432,8 @@ def plotComputePieStats(partitionStats: typing.Dict[int, PartitionStats],
                         partitions: typing.List[int],
                         prj_name: str,
                         summarizeFIFO: bool,
-                        outputPrefix: str):
+                        outputPrefix: str,
+                        title: str):
 
     # Create a Pie Chart
     # See https://matplotlib.org/3.1.1/gallery/pie_and_polar_charts/pie_features.html#sphx-glr-gallery-pie-and-polar-charts-pie-features-py
@@ -489,7 +499,7 @@ def plotComputePieStats(partitionStats: typing.Dict[int, PartitionStats],
         ax_pie.annotate(annotationTxtLbl[i], xy=annotationXY[i], xytext=(1.5 * (1.0 if annotationRight[i] else -1.0), annotationLblY[i]),
                         horizontalalignment=horizontalalignment, **kw)
 
-    ax_pie.set_title("Compute Workload Distribution: " + prj_name, y=1.2)
+    ax_pie.set_title("Compute Workload Distribution: " + title, y=1.2)
     plt.subplots_adjust(left=0.02, bottom=0.2, right=0.98, top=0.8)
 
     if outputPrefix is not None:
@@ -517,14 +527,14 @@ def main():
 
     plotStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
               setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix, setup_rtn.clkFreqGHz, setup_rtn.blockSize,
-              setup_rtn.yLim)
+              setup_rtn.yLim, setup_rtn.title)
 
     plotComputePieStats(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions, setup_rtn.prj_name,
-                        setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix)
+                        setup_rtn.summarizeFIFOs, setup_rtn.outputPrefix, setup_rtn.title)
 
     # Based on https://stackoverflow.com/questions/28269157/plotting-in-a-non-blocking-way-with-matplotlib
     # need a final plt.show() to force drawing to occur for all of the non-blocking instances
-    plt.show()
+    # plt.show()
 
 if __name__ == '__main__':
     main()

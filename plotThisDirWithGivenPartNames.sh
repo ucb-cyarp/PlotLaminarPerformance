@@ -37,15 +37,15 @@ if [[ $type == "cyclops"  ]]; then
   reportPrefix=./resultsPlotted
 
   if [[ -z $title ]]; then
-    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 0.07 --output-file-prefix $reportPrefix --partition-names "${partNames[@]}"
-    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 140 --output-file-prefix ${reportPrefix}_cycles --cpu-freq-ghz ${cpuFreqGHz} --partition-names "${partNames[@]}"
-    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_block --block-size 64 --ylim 0 4.0 --partition-names "${partNames[@]}"
-    #"$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_summary --cpu-freq-ghz ${cpuFreqGHz} --summarize-fifos --partition-names "${partNames[@]}" &
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --ylim 0 0.07 --output-file-prefix $reportPrefix --partition-names "${partNames[@]}"
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --ylim 0 140 --output-file-prefix ${reportPrefix}_cycles --cpu-freq-ghz ${cpuFreqGHz} --partition-names "${partNames[@]}"
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --output-file-prefix ${reportPrefix}_block --block-size 64 --ylim 0 4.0 --partition-names "${partNames[@]}"
+    #"$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --output-file-prefix ${reportPrefix}_summary --cpu-freq-ghz ${cpuFreqGHz} --summarize-fifos --partition-names "${partNames[@]}" &
   else
-    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 0.07 --output-file-prefix $reportPrefix --partition-names "${partNames[@]}" --title $title
-    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 140 --output-file-prefix ${reportPrefix}_cycles --cpu-freq-ghz ${cpuFreqGHz} --partition-names "${partNames[@]}" --title $title
-    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_block --block-size 64 --ylim 0 4.0 --partition-names "${partNames[@]}" --title $title
-    #"$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_summary --cpu-freq-ghz ${cpuFreqGHz} --summarize-fifos --partition-names "${partNames[@]}" &
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --ylim 0 0.07 --output-file-prefix $reportPrefix --partition-names "${partNames[@]}" --title $title
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --ylim 0 140 --output-file-prefix ${reportPrefix}_cycles --cpu-freq-ghz ${cpuFreqGHz} --partition-names "${partNames[@]}" --title $title
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --output-file-prefix ${reportPrefix}_block --block-size 64 --ylim 0 4.0 --partition-names "${partNames[@]}" --title $title
+    #"$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --discard-last-entry --output-file-prefix ${reportPrefix}_summary --cpu-freq-ghz ${cpuFreqGHz} --summarize-fifos --partition-names "${partNames[@]}" &
   fi
 
 else

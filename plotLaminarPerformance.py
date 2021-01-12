@@ -42,8 +42,19 @@ class PartitionStats:
         self.rateAvg = 0.0
         self.entries = 0
 
-def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames):
+def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames, discardLastEntry : bool):
     partition_telem_raw = pd.read_csv(telemPath)
+
+    if discardLastEntry:
+        if partition_telem_raw.shape[0] <= 1:
+            print('Error, telemetry file {} has {} entries and discarding the last record was requested'.format(
+                telemPath, partition_telem_raw.shape[0]))
+            exit(1)
+        partition_telem_raw = partition_telem_raw[:-1]
+    elif partition_telem_raw.shape[0] < 1:
+        print('Error, telemetry file {} has {} entries'.format(
+            telemPath, partition_telem_raw.shape[0]))
+        exit(1)
 
     #With help from https://stackoverflow.com/questions/29530232/how-to-check-if-any-value-is-nan-in-a-pandas-dataframe
     if partition_telem_raw.isna().values.any():
@@ -100,6 +111,7 @@ def setup():
     parser.add_argument('--ylim', required=False, type=float, nargs=2, help='The y limits (low, high).  If supplied, overrides the automatic y limit')
     parser.add_argument('--partition-names', nargs='+', type=str, required=False, help='List of human readable names corresponding to each partition (in ascending order of partitions)')
     parser.add_argument('--title', required=False, type=str, help='Title for the graphs.  If not supplied, the project name will be used')
+    parser.add_argument('--discard-last-entry', action='store_true', help='If true, discard the last entry in the telemetry file.  Useful if there are concerns that the last entry may be corrupted')
 
     args = parser.parse_args()
 
@@ -172,7 +184,7 @@ def setup():
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
                                                   'telemPath', 'prj_name', 'outputPrefix', 'summarizeFIFOs',
-                                                  'clkFreqGHz', 'blockSize', 'yLim', 'title'])
+                                                  'clkFreqGHz', 'blockSize', 'yLim', 'title', 'discardLastEntry'])
 
     if args.prj_name is None:
         prj_name = telem_config['name']
@@ -195,7 +207,8 @@ def setup():
     rtn_val = RtnType(partitionNameMap=partitionNameMap, partitionFileMap=partitionFileMap, fieldNames=field_names,
                       partitions=partition_nums_sorted, telemPath=telem_path, prj_name=prj_name,
                       outputPrefix=args.output_file_prefix, summarizeFIFOs=args.summarize_fifos,
-                      clkFreqGHz=clkFreqGHz, blockSize=blockSize, yLim=yLim, title=title)
+                      clkFreqGHz=clkFreqGHz, blockSize=blockSize, yLim=yLim, title=title,
+                      discardLastEntry=args.discard_last_entry)
     return rtn_val
 
 def plotLayer(values, lbl, x_lbls, y_offset, bar_width, tableTxt: typing.List[str], tableLbls: typing.List[str], colors,
@@ -537,7 +550,7 @@ def main():
             telemFilePath = setup_rtn.partitionFileMap[partitionNum]
         else:
             telemFilePath = setup_rtn.telemPath + '/' + setup_rtn.partitionFileMap[partitionNum]
-        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames)
+        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames, discardLastEntry=setup_rtn.discardLastEntry)
 
     reportRates(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions)
 

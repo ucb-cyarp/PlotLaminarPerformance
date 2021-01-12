@@ -42,8 +42,19 @@ class PartitionStats:
         self.rateAvg = 0.0
         self.entries = 0
 
-def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames):
+def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames, discardLastEntry : bool):
     partition_telem_raw = pd.read_csv(telemPath)
+
+    if discardLastEntry:
+        if partition_telem_raw.shape[0] <= 1:
+            print('Error, telemetry file {} has {} entries and discarding the last record was requested'.format(
+                telemPath, partition_telem_raw.shape[0]))
+            exit(1)
+        partition_telem_raw = partition_telem_raw[:-1]
+    elif partition_telem_raw.shape[0] < 1:
+        print('Error, telemetry file {} has {} entries'.format(
+            telemPath, partition_telem_raw.shape[0]))
+        exit(1)
 
     #With help from https://stackoverflow.com/questions/29530232/how-to-check-if-any-value-is-nan-in-a-pandas-dataframe
     if partition_telem_raw.isna().values.any():
@@ -92,6 +103,7 @@ def setup():
     parser = argparse.ArgumentParser(description='Plots telemetry information collected from Laminar process')
     parser.add_argument('--config', type=str, required=True, help='Path to the telemetry configuration JSON file')
     parser.add_argument('--telem-path', type=str, required=True, help='Path to the telemetry files referenced in the configuration JSON file')
+    parser.add_argument('--discard-last-entry', action='store_true', help='If true, discard the last entry in the telemetry file.  Useful if there are concerns that the last entry may be corrupted')
 
     args = parser.parse_args()
 
@@ -149,10 +161,10 @@ def setup():
     field_names.rate = telem_config['rateMSPSName']
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
-                                                  'telemPath'])
+                                                  'telemPath', 'discardLastEntry'])
 
     rtn_val = RtnType(partitionNameMap=partitionNameMap, partitionFileMap=partitionFileMap, fieldNames=field_names,
-                      partitions=partition_nums_sorted, telemPath=telem_path)
+                      partitions=partition_nums_sorted, telemPath=telem_path, discardLastEntry=args.discard_last_entry)
     return rtn_val
 
 def reportEntries(partitionStats: typing.Dict[int, PartitionStats],
@@ -170,7 +182,7 @@ def main():
             telemFilePath = setup_rtn.partitionFileMap[partitionNum]
         else:
             telemFilePath = setup_rtn.telemPath + '/' + setup_rtn.partitionFileMap[partitionNum]
-        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames)
+        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames, discardLastEntry=setup_rtn.discardLastEntry)
 
     reportEntries(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions)
 

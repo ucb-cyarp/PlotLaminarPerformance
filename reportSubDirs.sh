@@ -1,6 +1,6 @@
 #!/bin/bash
 
-plottingScript="$HOME/PycharmProjects/PlotLaminarPerformance/plotThisDirWithGivenPartNames.sh"
+plottingScript="$HOME/PycharmProjects/PlotLaminarPerformance/reportThisDir.sh"
 
 type=$1 #cyclops or nothing
 
@@ -29,7 +29,12 @@ do
         #Plot
         echo "In $fullPath:"
         echo "Executing: $plottingScript $designName $dir"
-        $plottingScript "$type" "$designName" "$dir"
+
+        if [[ $type == "cyclops" ]]; then
+          $plottingScript
+        else
+          $plottingScript "$designName"
+        fi
       fi
     done
   fi

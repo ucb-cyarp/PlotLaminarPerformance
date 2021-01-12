@@ -2,9 +2,11 @@
 
 oldDir=$(pwd)
 
-design=$1
+type=$1
 
-title=$2
+design=$2
+
+title=$3
 
 #Get build dir
 scriptSrc=$(dirname "${BASH_SOURCE[0]}")
@@ -29,15 +31,23 @@ partNames=("RRC" "AGC Pwr. Avg." "AGC Correct. Loop" "AGC Settled" "TR Var. Dela
 cpuFreqGHz=2.0
 
 # Set the relevant paths to plot
-if [[ -z $design ]]; then
+if [[ $type == "cyclops"  ]]; then
   configPath=./genSrc/cOut_rev1BB_receiver/rx_demo_telemDump_telemConfig.json
   telemPath=./results/rx
   reportPrefix=./resultsPlotted
 
-  "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 0.07 --output-file-prefix $reportPrefix --partition-names "${partNames[@]}"
-  "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 140 --output-file-prefix ${reportPrefix}_cycles --cpu-freq-ghz ${cpuFreqGHz} --partition-names "${partNames[@]}"
-  "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_block --block-size 64 --ylim 0 4.0 --partition-names "${partNames[@]}"
-  #"$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_summary --cpu-freq-ghz ${cpuFreqGHz} --summarize-fifos --partition-names "${partNames[@]}" &
+  if [[ -z $title ]]; then
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 0.07 --output-file-prefix $reportPrefix --partition-names "${partNames[@]}"
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 140 --output-file-prefix ${reportPrefix}_cycles --cpu-freq-ghz ${cpuFreqGHz} --partition-names "${partNames[@]}"
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_block --block-size 64 --ylim 0 4.0 --partition-names "${partNames[@]}"
+    #"$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_summary --cpu-freq-ghz ${cpuFreqGHz} --summarize-fifos --partition-names "${partNames[@]}" &
+  else
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 0.07 --output-file-prefix $reportPrefix --partition-names "${partNames[@]}" --title $title
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --ylim 0 140 --output-file-prefix ${reportPrefix}_cycles --cpu-freq-ghz ${cpuFreqGHz} --partition-names "${partNames[@]}" --title $title
+    "$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_block --block-size 64 --ylim 0 4.0 --partition-names "${partNames[@]}" --title $title
+    #"$scriptSrc/plotLaminarPerformance.py" --config $configPath --telem-path $telemPath --output-file-prefix ${reportPrefix}_summary --cpu-freq-ghz ${cpuFreqGHz} --summarize-fifos --partition-names "${partNames[@]}" &
+  fi
+
 else
   configPath=./genSrc/cOut_${design}/${design}_telemDump_telemConfig.json
   telemPath=./results

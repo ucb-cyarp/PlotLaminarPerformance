@@ -15,6 +15,8 @@ import typing
 import matplotlib.pyplot as plt
 import textwrap
 
+PERIOD_CHECK_THRESHOLD = 0.0001
+
 class TelemFileFieldsNames:
     def __init__(self):
         self.computeTime = ''
@@ -38,9 +40,15 @@ class PartitionStats:
         self.telemetryMiscPerSampleAvg = 0.0
         # In MSPS (Mega-Samples Per Second)
         self.rateAvg = 0.0
+        self.entries = 0
 
 def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames):
     partition_telem_raw = pd.read_csv(telemPath)
+
+    #With help from https://stackoverflow.com/questions/29530232/how-to-check-if-any-value-is-nan-in-a-pandas-dataframe
+    if partition_telem_raw.isna().values.any():
+        print('Error, telemetry file {} imported with NAN values.  Telemetry file may be corrupted.'.format(telemPath))
+        exit(1)
 
     secPerMSample = 1.0/partition_telem_raw[fieldNames.rate]
     secPerMSampleAvg = secPerMSample.mean()
@@ -70,6 +78,12 @@ def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames):
     stats.writingOutputFIFOsPerSampleAvg = writingOutputFIFOsTime/estimatedMegaSamplesProcessed
     telemetryMiscTime = partition_telem_raw[fieldNames.telemetryMisc].sum()
     stats.telemetryMiscPerSampleAvg = telemetryMiscTime/estimatedMegaSamplesProcessed
+    stats.entries = partition_telem_raw.shape[0]
+
+    # Sanity Check the I/O
+    for i in range(1, partition_telem_raw.shape[0]):
+        if abs(partition_telem_raw[fieldNames.totalTime][i] - partition_telem_raw[fieldNames.totalTime][0])/partition_telem_raw[fieldNames.totalTime][0] > PERIOD_CHECK_THRESHOLD:
+            print('Warning!: Entry {} Total Time ({}) is significantly different from the first ({}).  May indicate an issue with this record'.format(i, partition_telem_raw[fieldNames.totalTime][i], partition_telem_raw[fieldNames.totalTime][0]))
 
     return stats
 
@@ -510,7 +524,9 @@ def reportRates(partitionStats: typing.Dict[int, PartitionStats],
                 partitionNames: typing.Dict[int, PartitionStats],
                 partitions: typing.List[int]):
     for partitionNum in partitions:
-        print(partitionNames[partitionNum] + '(Partition ' + str(partitionNum) + ') Rate (MSPS): ' + str(partitionStats[partitionNum].rateAvg))
+        print(partitionNames[partitionNum] + ' (Partition ' + str(partitionNum) + ') Telem Entries: ' +
+              str(partitionStats[partitionNum].entries) + ', Rate (MSPS): ' +
+              str(partitionStats[partitionNum].rateAvg))
 
 def main():
     setup_rtn = setup()

@@ -15,7 +15,7 @@ import typing
 import matplotlib.pyplot as plt
 import textwrap
 
-PERIOD_CHECK_THRESHOLD = 0.0001
+PERIOD_CHECK_THRESHOLD = 0.001
 
 class TelemFileFieldsNames:
     def __init__(self):
@@ -42,15 +42,27 @@ class PartitionStats:
         self.rateAvg = 0.0
         self.entries = 0
 
-def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames, discardLastEntry : bool):
+def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames, discardLastEntry : bool, discardFirstEntry : bool):
     partition_telem_raw = pd.read_csv(telemPath)
 
-    if discardLastEntry:
+    if discardLastEntry and discardFirstEntry:
+        if partition_telem_raw.shape[0] <= 2:
+            print('Error, telemetry file {} has {} entries and discarding the first and last record was requested'.format(
+                telemPath, partition_telem_raw.shape[0]))
+            exit(1)
+        partition_telem_raw = partition_telem_raw[1:-1]
+    elif discardLastEntry:
         if partition_telem_raw.shape[0] <= 1:
             print('Error, telemetry file {} has {} entries and discarding the last record was requested'.format(
                 telemPath, partition_telem_raw.shape[0]))
             exit(1)
         partition_telem_raw = partition_telem_raw[:-1]
+    elif discardFirstEntry:
+        if partition_telem_raw.shape[0] <= 1:
+            print('Error, telemetry file {} has {} entries and discarding the first record was requested'.format(
+                telemPath, partition_telem_raw.shape[0]))
+            exit(1)
+        partition_telem_raw = partition_telem_raw[1:]
     elif partition_telem_raw.shape[0] < 1:
         print('Error, telemetry file {} has {} entries'.format(
             telemPath, partition_telem_raw.shape[0]))
@@ -60,6 +72,9 @@ def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames, discar
     if partition_telem_raw.isna().values.any():
         print('Error, telemetry file {} imported with NAN values.  Telemetry file may be corrupted.'.format(telemPath))
         exit(1)
+
+    # Need to reset the index if the first row is removed
+    partition_telem_raw.reset_index(inplace=True, drop=True)
 
     secPerMSample = 1.0/partition_telem_raw[fieldNames.rate]
     secPerMSampleAvg = secPerMSample.mean()
@@ -104,6 +119,7 @@ def setup():
     parser.add_argument('--config', type=str, required=True, help='Path to the telemetry configuration JSON file')
     parser.add_argument('--telem-path', type=str, required=True, help='Path to the telemetry files referenced in the configuration JSON file')
     parser.add_argument('--discard-last-entry', action='store_true', help='If true, discard the last entry in the telemetry file.  Useful if there are concerns that the last entry may be corrupted')
+    parser.add_argument('--discard-first-entry', action='store_true', help='If true, discard the first entry in the telemetry file.  Useful if there are concerns that the first entry may be incorrect (startup or doubleBufferInit)')
 
     args = parser.parse_args()
 
@@ -161,10 +177,11 @@ def setup():
     field_names.rate = telem_config['rateMSPSName']
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
-                                                  'telemPath', 'discardLastEntry'])
+                                                  'telemPath', 'discardLastEntry', 'discardFirstEntry'])
 
     rtn_val = RtnType(partitionNameMap=partitionNameMap, partitionFileMap=partitionFileMap, fieldNames=field_names,
-                      partitions=partition_nums_sorted, telemPath=telem_path, discardLastEntry=args.discard_last_entry)
+                      partitions=partition_nums_sorted, telemPath=telem_path, discardLastEntry=args.discard_last_entry,
+                      discardFirstEntry=args.discard_first_entry)
     return rtn_val
 
 def reportEntries(partitionStats: typing.Dict[int, PartitionStats],
@@ -182,7 +199,9 @@ def main():
             telemFilePath = setup_rtn.partitionFileMap[partitionNum]
         else:
             telemFilePath = setup_rtn.telemPath + '/' + setup_rtn.partitionFileMap[partitionNum]
-        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames, discardLastEntry=setup_rtn.discardLastEntry)
+        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames,
+                                                         discardLastEntry=setup_rtn.discardLastEntry,
+                                                         discardFirstEntry=setup_rtn.discardFirstEntry)
 
     reportEntries(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions)
 

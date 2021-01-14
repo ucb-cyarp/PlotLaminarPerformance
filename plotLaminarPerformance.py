@@ -15,7 +15,7 @@ import typing
 import matplotlib.pyplot as plt
 import textwrap
 
-PERIOD_CHECK_THRESHOLD = 0.0001
+PERIOD_CHECK_THRESHOLD = 0.001
 
 class TelemFileFieldsNames:
     def __init__(self):
@@ -42,24 +42,39 @@ class PartitionStats:
         self.rateAvg = 0.0
         self.entries = 0
 
-def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames, discardLastEntry : bool):
+def getPartitionStats(telemPath : str, fieldNames : TelemFileFieldsNames, discardLastEntry : bool, discardFirstEntry : bool):
     partition_telem_raw = pd.read_csv(telemPath)
 
-    if discardLastEntry:
+    if discardLastEntry and discardFirstEntry:
+        if partition_telem_raw.shape[0] <= 2:
+            print('Error, telemetry file {} has {} entries and discarding the first and last record was requested'.format(
+                telemPath, partition_telem_raw.shape[0]))
+            exit(1)
+        partition_telem_raw = partition_telem_raw[1:-1]
+    elif discardLastEntry:
         if partition_telem_raw.shape[0] <= 1:
             print('Error, telemetry file {} has {} entries and discarding the last record was requested'.format(
                 telemPath, partition_telem_raw.shape[0]))
             exit(1)
         partition_telem_raw = partition_telem_raw[:-1]
+    elif discardFirstEntry:
+        if partition_telem_raw.shape[0] <= 1:
+            print('Error, telemetry file {} has {} entries and discarding the first record was requested'.format(
+                telemPath, partition_telem_raw.shape[0]))
+            exit(1)
+        partition_telem_raw = partition_telem_raw[1:]
     elif partition_telem_raw.shape[0] < 1:
         print('Error, telemetry file {} has {} entries'.format(
             telemPath, partition_telem_raw.shape[0]))
         exit(1)
 
-    #With help from https://stackoverflow.com/questions/29530232/how-to-check-if-any-value-is-nan-in-a-pandas-dataframe
+    # With help from https://stackoverflow.com/questions/29530232/how-to-check-if-any-value-is-nan-in-a-pandas-dataframe
     if partition_telem_raw.isna().values.any():
         print('Error, telemetry file {} imported with NAN values.  Telemetry file may be corrupted.'.format(telemPath))
         exit(1)
+
+    # Need to reset the index if the first row is removed
+    partition_telem_raw.reset_index(inplace=True, drop=True)
 
     secPerMSample = 1.0/partition_telem_raw[fieldNames.rate]
     secPerMSampleAvg = secPerMSample.mean()
@@ -112,6 +127,7 @@ def setup():
     parser.add_argument('--partition-names', nargs='+', type=str, required=False, help='List of human readable names corresponding to each partition (in ascending order of partitions)')
     parser.add_argument('--title', required=False, type=str, help='Title for the graphs.  If not supplied, the project name will be used')
     parser.add_argument('--discard-last-entry', action='store_true', help='If true, discard the last entry in the telemetry file.  Useful if there are concerns that the last entry may be corrupted')
+    parser.add_argument('--discard-first-entry', action='store_true', help='If true, discard the first entry in the telemetry file.  Useful if there are concerns that the first entry may be incorrect (startup or doubleBufferInit)')
 
     args = parser.parse_args()
 
@@ -184,7 +200,8 @@ def setup():
 
     RtnType = collections.namedtuple('SetupRtn', ['partitionNameMap', 'partitionFileMap', 'fieldNames', 'partitions',
                                                   'telemPath', 'prj_name', 'outputPrefix', 'summarizeFIFOs',
-                                                  'clkFreqGHz', 'blockSize', 'yLim', 'title', 'discardLastEntry'])
+                                                  'clkFreqGHz', 'blockSize', 'yLim', 'title', 'discardLastEntry',
+                                                  'discardFirstEntry'])
 
     if args.prj_name is None:
         prj_name = telem_config['name']
@@ -208,7 +225,7 @@ def setup():
                       partitions=partition_nums_sorted, telemPath=telem_path, prj_name=prj_name,
                       outputPrefix=args.output_file_prefix, summarizeFIFOs=args.summarize_fifos,
                       clkFreqGHz=clkFreqGHz, blockSize=blockSize, yLim=yLim, title=title,
-                      discardLastEntry=args.discard_last_entry)
+                      discardLastEntry=args.discard_last_entry, discardFirstEntry=args.discard_first_entry)
     return rtn_val
 
 def plotLayer(values, lbl, x_lbls, y_offset, bar_width, tableTxt: typing.List[str], tableLbls: typing.List[str], colors,
@@ -448,11 +465,11 @@ def plotStats(partitionStats: typing.Dict[int, PartitionStats],
     if outputPrefix is not None:
         plt.savefig(outputPrefix+'_bar.pdf', format='pdf')
 
-    # Write to csv
-    x_lbls_Series = pd.Series([partitionNames[x] for x in partitions])
-    printTbl = pd.DataFrame(data=tableTxt, columns=x_lbls_Series)
-    printTbl.insert(loc=0, column='us/'+perLbl, value=tableLbls)
-    printTbl.to_csv(outputPrefix+'_bar.csv', index=False)
+        # Write to csv
+        x_lbls_Series = pd.Series([partitionNames[x] for x in partitions])
+        printTbl = pd.DataFrame(data=tableTxt, columns=x_lbls_Series)
+        printTbl.insert(loc=0, column='us/'+perLbl, value=tableLbls)
+        printTbl.to_csv(outputPrefix+'_bar.csv', index=False)
 
 def plotComputePieStats(partitionStats: typing.Dict[int, PartitionStats],
                         partitionNames: typing.Dict[int, PartitionStats],
@@ -550,7 +567,9 @@ def main():
             telemFilePath = setup_rtn.partitionFileMap[partitionNum]
         else:
             telemFilePath = setup_rtn.telemPath + '/' + setup_rtn.partitionFileMap[partitionNum]
-        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames, discardLastEntry=setup_rtn.discardLastEntry)
+        partitionStats[partitionNum] = getPartitionStats(telemPath=telemFilePath, fieldNames=setup_rtn.fieldNames,
+                                                         discardLastEntry=setup_rtn.discardLastEntry,
+                                                         discardFirstEntry=setup_rtn.discardFirstEntry)
 
     reportRates(partitionStats, setup_rtn.partitionNameMap, setup_rtn.partitions)
 

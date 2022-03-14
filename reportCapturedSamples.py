@@ -15,7 +15,7 @@ import typing
 import matplotlib.pyplot as plt
 import textwrap
 
-PERIOD_CHECK_THRESHOLD = 0.001
+PERIOD_CHECK_THRESHOLD = 0.02
 
 class TelemFileFieldsNames:
     def __init__(self):
@@ -188,7 +188,7 @@ def reportEntries(partitionStats: typing.Dict[int, PartitionStats],
                   partitionNames: typing.Dict[int, PartitionStats],
                   partitions: typing.List[int]):
     for partitionNum in partitions:
-        print(partitionNames[partitionNum] + ' (Partition ' + str(partitionNum) + ') Telem Entries: ' + str(partitionStats[partitionNum].entries))
+        print(partitionNames[partitionNum] + ' (Partition ' + str(partitionNum) + ') Telem Entries: ' + str(partitionStats[partitionNum].entries) + ', Rate (Msps): ' + str(partitionStats[partitionNum].rateAvg))
 
 def main():
     setup_rtn = setup()

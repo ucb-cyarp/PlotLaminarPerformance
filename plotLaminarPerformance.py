@@ -15,7 +15,7 @@ import typing
 import matplotlib.pyplot as plt
 import textwrap
 
-PERIOD_CHECK_THRESHOLD = 0.001
+PERIOD_CHECK_THRESHOLD = 0.02
 
 class TelemFileFieldsNames:
     def __init__(self):
@@ -292,7 +292,8 @@ def wrapLbls(lbls):
     # TODO: Set the number of characters for the wrap dynamically based on the font size
     #       See https://matplotlib.org/3.1.1/_modules/matplotlib/table.html#Cell.auto_set_font_size
     #       For ideas on how one might go about doing this
-    numChars = 14
+    numChars = 20
+    # numChars = 80
     lbls_wrapped = []
     lbls_maxnumlines = 1
     for lbl in lbls:

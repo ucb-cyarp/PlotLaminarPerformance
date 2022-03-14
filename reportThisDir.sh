@@ -23,4 +23,5 @@ else
   telemPath=./results
 fi
 
-"$scriptSrc/reportCapturedSamples.py" --config $configPath --telem-path $telemPath
+echo "$scriptSrc/reportCapturedSamples.py --config $configPath --telem-path $telemPath --discard-last-entry --discard-first-entry"
+"$scriptSrc/reportCapturedSamples.py" --config $configPath --telem-path $telemPath --discard-last-entry --discard-first-entry

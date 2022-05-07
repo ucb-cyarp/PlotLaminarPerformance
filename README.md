@@ -1,4 +1,6 @@
 # PlotLaminarPerformance
+Zenodo Concept DOI: [![Concept DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6526278.svg)](https://doi.org/10.5281/zenodo.6526278)
+
 Scripts for plotting performance from telemetry collected from Laminar applications
 
 ## Citing This Software:
